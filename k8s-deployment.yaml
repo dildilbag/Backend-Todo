@@ -14,7 +14,7 @@ spec:
     spec:
       containers:
       - name: backend
-        image: backend-todo:latest
+        image: dilbag463/backend-todo:latest
         ports:
         - containerPort: 3000
 ---
