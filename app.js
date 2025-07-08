@@ -179,4 +179,4 @@ app.delete('/todos/:id', function(request, response) {
 /***************************************************************************************************
     Starten der express Anwendung
 ****************************************************************************************************/
-app.listen(port, () => console.log(`Techstarter Todo App listening on port ${port}!`))
+app.listen(port, '0.0.0.0', () => console.log(`Techstarter Todo App listening on port ${port}!`))
