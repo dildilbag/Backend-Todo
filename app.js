@@ -1,34 +1,18 @@
-/***************************************************************************************************
-    Abhängige Pakete die in der package.json definiert sind
-*****************************************************************************************************/
-const express = require('express')                  // http-server framework
-const cors = require('cors')                        // CORS deaktivieren
-const csv = require('csv-parser');                  // handler für CSV Dateien
-const fs = require('fs');                           // handler zum lesen/schreiben von Dateien
-const ObjectsToCsv = require('objects-to-csv')      // Wandlet CSV Zeilen in JSON-Objekte um
+const fs = require('fs');
+const csv = require('csv-parser');
+const ObjectsToCsv = require('objects-to-csv');
+const express = require('express');
+const cors = require('cors');
+const bodyParser = require('body-parser');
+const morgan = require('morgan');
 const promMid = require('express-prometheus-middleware');
 
-/***************************************************************************************************
-    Konfiguration
+const port = process.env.PORT || 5000;
+const app = express();
 
-    
-*****************************************************************************************************/
-const port = process.env.PORT || 5000               // Konfiguration des Webserver-Ports
-let morgan = require('morgan')                      // http-zugriff logging auf der CLI
-let bodyParser = require('body-parser');            // einfacher handler für POST/PUT payloads
-const corsOptions = {                               // CORS-Optionen definieren
-    origin: '*'
-}
-
-/***************************************************************************************************
-    express framework initialisieren
-****************************************************************************************************/
-
-const app = express()    
-                           // express app erstellen
-app.use(bodyParser.json());                         // den body-parser übergeben
-app.use(morgan('combined'))                         // den http-logger übergeben
-app.use(cors(corsOptions))                          // CORS-Einstellungen übergeben
+app.use(bodyParser.json());
+app.use(morgan('combined'));
+app.use(cors({ origin: '*' }));
 app.use(promMid({
     metricsPath: '/metrics',
     collectDefaultMetrics: true,
@@ -36,147 +20,102 @@ app.use(promMid({
     requestLengthBuckets: [512, 1024, 5120, 10240, 51200, 102400],
     responseLengthBuckets: [512, 1024, 5120, 10240, 51200, 102400],
 }));
-/***************************************************************************************************
-    todo liste
-****************************************************************************************************/
-let todoListe = [
-    
-];                                  // Array Liste der todo-Einträge
 
-/***************************************************************************************************
-    CSV Datei lesen und zur Liste hinzufügen
-****************************************************************************************************/
-fs.createReadStream('data.csv')
-    .pipe(csv())
-    .on('data', (row) => {
-        todoListe.push(row)
-    })
+let todoListe = [];
 
-/***************************************************************************************************
-    Standard-Route, ohne funktion
-****************************************************************************************************/
-app.get("/", (request, response) => {
-    response.json({
-        greeting: "Hello World of Techstarter!"
-    })
+// Load CSV file if it exists, otherwise start empty
+const dataFilePath = 'data/data.csv';
+if (fs.existsSync(dataFilePath)) {
+    fs.createReadStream(dataFilePath)
+      .pipe(csv())
+      .on('data', (row) => {
+          todoListe.push(row);
+      })
+      .on('end', () => {
+          console.log(`Loaded ${todoListe.length} todos from CSV.`);
+      });
+} else {
+    console.log('CSV file not found. Starting with empty todo list.');
+}
+
+// Routes
+app.get("/", (req, res) => {
+    res.json({ greeting: "Hello World of Taskcards!" });
 });
 
-/***************************************************************************************************
-    Ausgabe aller Objekte als Array
-****************************************************************************************************/
-app.get('/todos', (request, response) => {
-    // TODO: respone muss das array als json zurück geben
-response.json({
-    todoListe
-})
-        
-})
-
-/***************************************************************************************************
-    Erstellen eines neuen Eintrags
-    Übertragen wird der payload in der form
-    ```
-    {
-        "name": "Ein neuer Eintrag"
-    }
-    ```
-****************************************************************************************************/
-app.post('/todos', function(request, response) {
- let lastId = 0;
- for(let i = 0; i<todoListe.length; i++){
-    let currentId = parseInt(todoListe[i]['id']);
-    if(currentId > lastId){
-        lastId = currentId
-    }
- }
-  
-    let newItem ={
-        id : lastId +1,
-        name : request.body['name'],
-        done : 'false'
-    }
-   
-  todoListe.push(newItem)
-
-  const csv = new ObjectsToCsv(todoListe);
- 
-  // Save to file:
-  csv.toDisk('./data.csv');
- 
-  // Return the CSV file as string:
-
-   response.json(todoListe)
- //response.json(newItem)
-
-
-    
-
-    // TODO:
-    //      * Payload auslesen
-    //      * Neues CSV Element anlegen (id, name, done)
-    //      * Element an die Liste anfügen
-    //      * Liste in CSV um wandeln und speichern über `ObjectsToCsv`
-    //      * neue Liste zurück geben
+app.get('/todos', (req, res) => {
+    res.json({ todoListe });
 });
 
-/***************************************************************************************************
-    Aktualisieren eines bestehenden Eintrags
-    Übertragen wird der payload in der form
-    ```
-    {
-        "id": 1,
-        "done": true
+app.post('/todos', (req, res) => {
+    let lastId = 0;
+    for (let i = 0; i < todoListe.length; i++) {
+        let currentId = parseInt(todoListe[i]['id']);
+        if (currentId > lastId) lastId = currentId;
     }
-    ```
-****************************************************************************************************/
-app.put('/todos', function(request, response) {
-    var body = request.body
-    var id = body['id'];
-    const parseInt = todoListe.findIndex(todo =>{
-        return todo.id ==id;
+
+    let newItem = {
+        id: lastId + 1,
+        name: req.body['name'],
+        done: 'false'
+    };
+
+    todoListe.push(newItem);
+
+    const csv = new ObjectsToCsv(todoListe);
+    csv.toDisk(dataFilePath)
+       .then(() => {
+           res.json(todoListe);
+       })
+       .catch(err => {
+           console.error('Error saving CSV:', err);
+           res.status(500).json({ error: 'Failed to save todo list' });
        });
-       if(parseInt >= 0){
-        todoListe[parseInt].done = body['done'].toString();
+});
+
+app.put('/todos', (req, res) => {
+    const body = req.body;
+    const id = body['id'];
+    const index = todoListe.findIndex(todo => todo.id == id);
+
+    if (index >= 0) {
+        todoListe[index].done = body['done'].toString();
+
         const csv = new ObjectsToCsv(todoListe);
-  csv.toDisk('./data.csv');
-       }
-   response.json(todoListe)
-       
-
-    // TODO:
-    //      * Payload auslesen
-    //      * Element in der Liste finden anhand der übertragenen ID
-    //      * Element aktualisieren, passend zum `done` Status
-    //      * Liste in CSV um wandeln und speichern über `ObjectsToCsv`
-    //      * neue Liste zurück geben
+        csv.toDisk(dataFilePath)
+           .then(() => {
+               res.json(todoListe);
+           })
+           .catch(err => {
+               console.error('Error saving CSV:', err);
+               res.status(500).json({ error: 'Failed to save todo list' });
+           });
+    } else {
+        res.status(404).json({ error: 'Todo item not found' });
+    }
 });
 
-/***************************************************************************************************
-    Löschen eines bestehenden Eintrags
-****************************************************************************************************/
-app.delete('/todos/:id', function(request, response) {
-   let id = request.params['id']
-   const params = todoListe.findIndex(todo => {
-    return todo.id ==id;
-   });
-   todoListe.splice(params, 1);
+app.delete('/todos/:id', (req, res) => {
+    const id = req.params['id'];
+    const index = todoListe.findIndex(todo => todo.id == id);
 
-   const csv = new ObjectsToCsv(todoListe);
-  csv.toDisk('./data.csv');
+    if (index >= 0) {
+        todoListe.splice(index, 1);
 
-   response.json(todoListe)
-
-
-    // TODO:
-    //      * ID aus der URL auslesen
-    //      * Element in der Liste finden anhand der übertragenen ID
-    //      * Element aus der Liste löschen
-    //      * Liste in CSV um wandeln und speichern über `ObjectsToCsv`
-    //      * neue Liste zurück geben
+        const csv = new ObjectsToCsv(todoListe);
+        csv.toDisk(dataFilePath)
+           .then(() => {
+               res.json(todoListe);
+           })
+           .catch(err => {
+               console.error('Error saving CSV:', err);
+               res.status(500).json({ error: 'Failed to save todo list' });
+           });
+    } else {
+        res.status(404).json({ error: 'Todo item not found' });
+    }
 });
 
-
-/***************************************************************************************************
-    Starten der express Anwendung
-****************************************************************************************************/
-app.listen(port, '0.0.0.0', () => console.log(`Task-cards Todo App listening on port ${port}!`))
+app.listen(port, '0.0.0.0', () => {
+    console.log(`Task-cards Todo App listening on port ${port}!`);
+});
