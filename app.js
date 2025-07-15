@@ -44,7 +44,7 @@ app.get("/", (req, res) => {
 });
 
 app.get('/todos', (req, res) => {
-    res.json({ todoListe });
+    res.json({todoListe});
 });
 
 app.post('/todos', (req, res) => {
@@ -65,7 +65,7 @@ app.post('/todos', (req, res) => {
     const csv = new ObjectsToCsv(todoListe);
     csv.toDisk(dataFilePath)
        .then(() => {
-           res.json(todoListe);
+           res.json({todoListe});
        })
        .catch(err => {
            console.error('Error saving CSV:', err);
@@ -84,7 +84,7 @@ app.put('/todos', (req, res) => {
         const csv = new ObjectsToCsv(todoListe);
         csv.toDisk(dataFilePath)
            .then(() => {
-               res.json(todoListe);
+               res.json({todoListe});
            })
            .catch(err => {
                console.error('Error saving CSV:', err);
@@ -105,7 +105,7 @@ app.delete('/todos/:id', (req, res) => {
         const csv = new ObjectsToCsv(todoListe);
         csv.toDisk(dataFilePath)
            .then(() => {
-               res.json(todoListe);
+               res.json({todoListe});
            })
            .catch(err => {
                console.error('Error saving CSV:', err);
